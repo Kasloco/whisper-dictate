@@ -22,6 +22,8 @@ from pynput import keyboard
 from pynput.keyboard import Controller, Key
 from faster_whisper import WhisperModel
 
+from overlay import Overlay
+
 # ---------- Config ----------
 MODEL_SIZE   = "small.en"   # tiny.en | base.en | small.en | medium.en
 COMPUTE_TYPE = "int8"       # int8 is fast on Apple Silicon CPU
@@ -38,6 +40,7 @@ model = WhisperModel(MODEL_SIZE, device="cpu", compute_type=COMPUTE_TYPE)
 print("Ready. Hold RIGHT OPTION to dictate. Ctrl+C to quit.\n")
 
 kbd = Controller()
+overlay = Overlay()
 
 _recording = False
 _frames: list = []
@@ -46,6 +49,7 @@ _lock = threading.Lock()
 
 def audio_callback(indata, frames_count, time_info, status):
     if status:
+        # non-fatal stream warnings
         print(f"[audio] {status}", file=sys.stderr)
     if _recording:
         _frames.append(indata.copy())
@@ -67,11 +71,13 @@ def transcribe_and_paste():
         chunks = _frames
         _frames = []
     if not chunks:
+        overlay.hide()
         return
     audio = np.concatenate(chunks, axis=0).flatten().astype(np.float32)
     duration = len(audio) / SAMPLE_RATE
     if duration < MIN_SECONDS:
         print(f"  (too short: {duration:.2f}s — skipped)")
+        overlay.hide()
         return
     print(f"  transcribing {duration:.1f}s ...")
     segments, _info = model.transcribe(
@@ -84,14 +90,17 @@ def transcribe_and_paste():
     text = " ".join(seg.text.strip() for seg in segments).strip()
     if not text:
         print("  (no speech detected)")
+        overlay.hide()
         return
     print(f"  > {text}")
     pyperclip.copy(text)
     if AUTO_PASTE:
+        # small delay so modifier key release is registered
         time.sleep(0.08)
         with kbd.pressed(Key.cmd):
             kbd.press("v")
             kbd.release("v")
+    overlay.hide()
 
 
 def on_press(key):
@@ -103,6 +112,7 @@ def on_press(key):
             _recording = True
             _frames.clear()
         print("● recording...", flush=True)
+        overlay.show_recording()
 
 
 def on_release(key):
@@ -112,21 +122,28 @@ def on_release(key):
             if not _recording:
                 return
             _recording = False
+        overlay.show_transcribing()
         threading.Thread(target=transcribe_and_paste, daemon=True).start()
+
+
+def _listen():
+    """Run the keyboard listener (blocks until interrupted)."""
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
 
 
 def main():
     try:
-        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-            listener.join()
+        overlay.run(on_ready=_listen)
     except KeyboardInterrupt:
-        print("\nExiting.")
+        pass
     finally:
         try:
             stream.stop()
             stream.close()
         except Exception:
             pass
+        print("\nExiting.")
 
 
 if __name__ == "__main__":
