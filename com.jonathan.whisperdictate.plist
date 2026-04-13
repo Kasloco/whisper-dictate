@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jonathan.whisperdictate</string>
+
+    <!--
+      Invoke the framework Python DIRECTLY (not via the venv's symlink stub).
+      macOS TCC tracks Accessibility permissions by the actual binary invoked,
+      and the venv wrapper is a symlink that the Accessibility picker can't
+      select. By pointing launchd at the real binary, we match the user's
+      existing "python3.13" Accessibility grant, and we pull in the venv's
+      installed packages via PYTHONPATH below.
+    -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>YOUR_PYTHON_PATH</string>
+        <string>-u</string>
+        <string>YOUR_HOME/whisper-dictate/dictate.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>YOUR_HOME/whisper-dictate</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>Nice</key>
+    <integer>5</integer>
+
+    <key>StandardOutPath</key>
+    <string>YOUR_HOME/whisper-dictate/dictate.log</string>
+    <key>StandardErrorPath</key>
+    <string>YOUR_HOME/whisper-dictate/dictate.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Library/Frameworks/Python.framework/Versions/3.13/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <!-- Pull in faster-whisper, sounddevice, pynput, etc. from the venv -->
+        <key>PYTHONPATH</key>
+        <string>YOUR_HOME/whisper-dictate/.venv/lib/python3.13/site-packages</string>
+    </dict>
+</dict>
+</plist>
