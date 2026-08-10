@@ -49,3 +49,35 @@ def capture_selected_text(
     if not selected or selected == marker or not selected.strip():
         return None
     return selected
+
+
+def capture_ax_app_text(pid: int) -> Optional[str]:
+    """Extract text from the given process using macOS Accessibility APIs."""
+    try:
+        import ApplicationServices  # type: ignore
+
+        ax_app = ApplicationServices.AXUIElementCreateApplication(pid)
+
+        def _get_attr(el, attr):
+            err, val = ApplicationServices.AXUIElementCopyAttributeValue(
+                el, attr, None,
+            )
+            return val if err == 0 else None
+
+        # Check focused UI element first
+        focused = _get_attr(ax_app, "AXFocusedUIElement")
+        if focused:
+            val = _get_attr(focused, "AXValue")
+            if val and isinstance(val, str) and val.strip():
+                return val.strip()
+
+        # Fallback to main window
+        win = _get_attr(ax_app, "AXMainWindow")
+        if win:
+            val = _get_attr(win, "AXValue")
+            if val and isinstance(val, str) and val.strip():
+                return val.strip()
+    except Exception:
+        pass
+    return None
+

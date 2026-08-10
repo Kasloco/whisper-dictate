@@ -19,14 +19,16 @@ import time
 
 import numpy as np
 import sounddevice as sd
+import AppKit
 import pyperclip
 from pynput import keyboard
 from pynput.keyboard import Controller, Key
 from faster_whisper import WhisperModel
 
 from overlay import Overlay
-from response_capture import capture_selected_text
+from response_capture import capture_selected_text, capture_ax_app_text
 from voice_output import VoiceOutput
+
 
 # ---------- Config ----------
 MODEL_SIZE   = "small.en"   # tiny.en | base.en | small.en | medium.en
@@ -103,6 +105,51 @@ def _clipboard_watcher():
             )
 
 
+def _auto_read_worker(app_pid: int, prompt_text: str):
+    """Hands-free background worker that watches for the AI response in the target app."""
+    global _armed_until
+
+    start_time = time.time()
+    last_ax_text = capture_ax_app_text(app_pid) or ""
+
+    # Poll accessibility tree & clipboard for up to 30 seconds
+    while time.time() - start_time < 30.0:
+        time.sleep(0.5)
+
+        # 1. Try Accessibility API text from the target application window
+        ax_text = capture_ax_app_text(app_pid)
+        if ax_text and ax_text != last_ax_text and ax_text.strip() != prompt_text.strip():
+            print(f"[voice] Hands-free auto-detected response from app ({len(ax_text)} chars). Speaking...")
+            _armed_until = 0.0
+            voice_output.speak(
+                ax_text,
+                on_start=overlay.show_speaking,
+                on_done=overlay.hide,
+            )
+            return
+
+        # 2. Check if clipboard received the response automatically
+        try:
+            clip = pyperclip.paste()
+            if (
+                clip
+                and clip != _last_seen_clipboard
+                and clip.strip() != prompt_text.strip()
+                and "__WHISPER_DICTATE_SELECTION_" not in clip
+            ):
+                print(f"[voice] Auto-detected response from clipboard ({len(clip)} chars). Speaking...")
+                _armed_until = 0.0
+                voice_output.speak(
+                    clip,
+                    on_start=overlay.show_speaking,
+                    on_done=overlay.hide,
+                )
+                return
+        except Exception:
+            pass
+
+
+
 
 def audio_callback(indata, frames_count, time_info, status):
     if status:
@@ -158,12 +205,21 @@ def transcribe_and_paste():
             kbd.press("v")
             kbd.release("v")
 
-    # Arm response watcher for 90 seconds
+    # Arm response watcher and launch hands-free auto-read worker
     _last_dictated_text = text
     _last_seen_clipboard = text
     _armed_until = time.time() + RESPONSE_TIMEOUT_SECONDS
-    print("  [voice] Dictation finished. Armed for response (copy reply in Discord to speak).")
+    print("  [voice] Dictation finished. Armed for response (watching for reply).")
     overlay.hide()
+
+    try:
+        front_app = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
+        if front_app:
+            pid = front_app.processIdentifier()
+            threading.Thread(target=_auto_read_worker, args=(pid, text), daemon=True).start()
+    except Exception:
+        pass
+
 
 
 
