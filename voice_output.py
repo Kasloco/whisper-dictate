@@ -101,9 +101,12 @@ def prepare_speech_text(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> str:
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
 
     text = re.sub(r"[*_~]", "", text)
+    # Strip non-ASCII kaomojis, exotic symbols, and non-English character noise
+    text = re.sub(r"[^\x00-\x7F]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) <= max_chars:
         return text
+
 
     clipped = text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:")
     return f"{clipped} … response truncated"
