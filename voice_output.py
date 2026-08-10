@@ -89,10 +89,17 @@ def prepare_speech_text(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> str:
     """
 
     text = text.strip()
+
+    # If full window or terminal history is passed, slice to keep ONLY the last response paragraph
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if len(paragraphs) > 1:
+        text = paragraphs[-1]
+
     text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
+
     text = re.sub(r"[*_~]", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) <= max_chars:
