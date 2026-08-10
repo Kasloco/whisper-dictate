@@ -45,12 +45,23 @@ def main():
     os.close(slave_fd)
 
     buffer = []
+    last_user_prompt = ""
 
     def speak_buffer(text_block):
+        nonlocal last_user_prompt
         prepared = prepare_speech_text(text_block)
-        if prepared:
-            print(f"\n[voice] Speaking CLI response ({len(prepared)} chars)...")
-            voice_output.speak(prepared)
+        if not prepared or not prepared.strip():
+            return
+        
+        # Normalize and filter out user input prompt echo
+        p_norm = last_user_prompt.strip().lower()
+        b_norm = prepared.strip().lower()
+        if p_norm and (b_norm == p_norm or b_norm in p_norm or p_norm in b_norm):
+            if len(b_norm) <= len(p_norm) + 20:
+                return
+
+        print(f"\n[voice] Speaking AI response ({len(prepared)} chars)...")
+        voice_output.speak(prepared)
 
     try:
         while process.poll() is None:
@@ -80,13 +91,15 @@ def main():
 
             if sys.stdin in r:
                 try:
-                    user_input = os.read(sys.stdin.fileno(), 1024)
-                    if not user_input:
+                    user_input_bytes = os.read(sys.stdin.fileno(), 1024)
+                    if not user_input_bytes:
                         break
-                    os.write(master_fd, user_input)
+                    last_user_prompt = user_input_bytes.decode("utf-8", errors="replace").strip()
+                    os.write(master_fd, user_input_bytes)
                     buffer.clear()
                 except OSError:
                     break
+
     except KeyboardInterrupt:
         pass
     finally:
