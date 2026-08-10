@@ -40,7 +40,33 @@ AUTO_PASTE   = True         # If False, text is only copied to clipboard.
 LANGUAGE     = "en"         # set to None for autodetect
 MIN_SECONDS  = 0.3          # ignore blips shorter than this
 SPEAK_HOTKEY = os.getenv("SPEAK_HOTKEY", "<ctrl>+<shift>+s")
+
+# AI Voice Assistant Settings
+ASSISTANT_MODE = os.getenv("ASSISTANT_MODE", "True").lower() in ("true", "1", "yes")
+OLLAMA_MODEL   = os.getenv("OLLAMA_MODEL", "glm-5.2:cloud")
+OLLAMA_URL     = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 # ----------------------------
+
+
+def query_llm_assistant(prompt_text: str) -> str:
+    """Query local AI model (Ollama) to generate a response for the user prompt."""
+    payload = json.dumps({
+        "model": OLLAMA_MODEL,
+        "prompt": prompt_text,
+        "stream": False,
+    }).encode("utf-8")
+    req = Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            reply = data.get("response", "").strip()
+            if "</thinking>" in reply:
+                reply = reply.split("</thinking>")[-1].strip()
+            return reply
+    except Exception as exc:
+        print(f"  [assistant] Error querying AI model: {exc}")
+        return ""
+
 
 print(f"Loading faster-whisper model '{MODEL_SIZE}' (compute_type={COMPUTE_TYPE})...")
 print("(first run will download the model, ~100-500 MB depending on size)")
@@ -170,6 +196,28 @@ def transcribe_and_paste():
         overlay.hide()
         return
     print(f"  > {text}")
+
+    if ASSISTANT_MODE:
+        print(f"  [assistant] Querying AI model '{OLLAMA_MODEL}'...")
+        overlay.show_transcribing()
+        ai_response = query_llm_assistant(text)
+        if ai_response:
+            print(f"  [assistant response] > {ai_response}")
+            pyperclip.copy(ai_response)
+            if AUTO_PASTE:
+                time.sleep(0.08)
+                with kbd.pressed(Key.cmd):
+                    kbd.press("v")
+                    kbd.release("v")
+
+            print("  [voice] Speaking AI response via ElevenLabs...")
+            voice_output.speak(
+                ai_response,
+                on_start=overlay.show_speaking,
+                on_done=overlay.hide,
+            )
+            return
+
     pyperclip.copy(text)
     if AUTO_PASTE:
         # small delay so modifier key release is registered
@@ -184,6 +232,7 @@ def transcribe_and_paste():
     _armed_until = time.time() + RESPONSE_TIMEOUT_SECONDS
     print("  [voice] Dictation finished. Armed for AI response (copy reply to speak).")
     overlay.hide()
+
 
 
 
