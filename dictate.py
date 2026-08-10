@@ -65,6 +65,20 @@ RESPONSE_TIMEOUT_SECONDS = 90.0
 # -------------------------------------------------
 
 
+def _is_dictated_prompt(text: str) -> bool:
+    """Return True if text matches or is contained within the user's dictated prompt."""
+    if not text or not text.strip():
+        return True
+    t_norm = text.strip().lower()
+    p_norm = _last_dictated_text.strip().lower()
+    if not p_norm:
+        return False
+    if t_norm == p_norm or t_norm in p_norm or p_norm in t_norm:
+        if len(t_norm) <= len(p_norm) + 20:
+            return True
+    return False
+
+
 def _clipboard_watcher():
     """Monitor clipboard for new response text, ONLY while armed after dictation."""
     global _armed_until, _last_seen_clipboard
@@ -86,70 +100,25 @@ def _clipboard_watcher():
             continue
 
         if current and current != _last_seen_clipboard:
-            _last_seen_clipboard = current
-
-            # Ignore if clipboard is identical to the prompt the user just dictated
-            if current.strip() == _last_dictated_text.strip():
+            # Ignore if clipboard matches the dictated prompt
+            if _is_dictated_prompt(current):
+                _last_seen_clipboard = current
                 continue
 
             # Ignore temporary selection markers from response_capture
             if "__WHISPER_DICTATE_SELECTION_" in current:
                 continue
 
+            _last_seen_clipboard = current
             # Disarm immediately so subsequent copies are ignored
             _armed_until = 0.0
-            print(f"[voice] Response captured from clipboard ({len(current)} chars). Speaking...")
+            print(f"[voice] AI Response captured from clipboard ({len(current)} chars). Speaking...")
             voice_output.speak(
                 current,
                 on_start=overlay.show_speaking,
                 on_done=overlay.hide,
             )
 
-
-def _auto_read_worker(app_pid: int, prompt_text: str):
-    """Hands-free background worker that watches for the AI response in the target app."""
-    global _armed_until
-
-    start_time = time.time()
-    last_ax_text = capture_ax_app_text(app_pid) or ""
-
-    # Poll accessibility tree & clipboard for up to 30 seconds
-    while time.time() - start_time < 30.0:
-        time.sleep(0.5)
-
-        # 1. Try Accessibility API text from the target application window
-        ax_text = capture_ax_app_text(app_pid)
-        if ax_text and ax_text != last_ax_text:
-            clean_response = extract_last_response(ax_text, prompt_text)
-            if clean_response and clean_response.strip() != prompt_text.strip():
-                print(f"[voice] Hands-free auto-detected Hermes response ({len(clean_response)} chars). Speaking...")
-                _armed_until = 0.0
-                voice_output.speak(
-                    clean_response,
-                    on_start=overlay.show_speaking,
-                    on_done=overlay.hide,
-                )
-                return
-
-        # 2. Check if clipboard received the response automatically
-        try:
-            clip = pyperclip.paste()
-            if (
-                clip
-                and clip != _last_seen_clipboard
-                and clip.strip() != prompt_text.strip()
-                and "__WHISPER_DICTATE_SELECTION_" not in clip
-            ):
-                print(f"[voice] Auto-detected Hermes response from clipboard ({len(clip)} chars). Speaking...")
-                _armed_until = 0.0
-                voice_output.speak(
-                    clip,
-                    on_start=overlay.show_speaking,
-                    on_done=overlay.hide,
-                )
-                return
-        except Exception:
-            pass
 
 
 
@@ -209,20 +178,13 @@ def transcribe_and_paste():
             kbd.press("v")
             kbd.release("v")
 
-    # Arm response watcher and launch hands-free auto-read worker
+    # Arm response watcher for 90 seconds
     _last_dictated_text = text
     _last_seen_clipboard = text
     _armed_until = time.time() + RESPONSE_TIMEOUT_SECONDS
-    print("  [voice] Dictation finished. Armed for response (watching for reply).")
+    print("  [voice] Dictation finished. Armed for AI response (copy reply to speak).")
     overlay.hide()
 
-    try:
-        front_app = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
-        if front_app:
-            pid = front_app.processIdentifier()
-            threading.Thread(target=_auto_read_worker, args=(pid, text), daemon=True).start()
-    except Exception:
-        pass
 
 
 
