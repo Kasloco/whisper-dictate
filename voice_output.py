@@ -20,12 +20,22 @@ import re
 import subprocess
 import tempfile
 import threading
+import ssl
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+
+def _get_ssl_context() -> ssl.SSLContext:
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
 
 
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
@@ -263,7 +273,12 @@ class VoiceOutput:
         )
 
         try:
-            response_context = urlopen(request, timeout=self.timeout_seconds)
+            response_context = urlopen(
+                request,
+                timeout=self.timeout_seconds,
+                context=_get_ssl_context(),
+            )
+
         except HTTPError as exc:
             detail = exc.read(400).decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
