@@ -335,12 +335,14 @@ class VoiceOutput:
     ) -> None:
         if cancel_event.is_set():
             return
+        voice_name = os.getenv("MACOS_SAY_VOICE", "Samantha")
         process = subprocess.Popen(
-            ["say", text],
+            ["say", "-v", voice_name, text],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
         )
+
         with self._lock:
             self._active_process = process
         try:
