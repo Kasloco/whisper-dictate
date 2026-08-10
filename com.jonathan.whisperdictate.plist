@@ -15,13 +15,13 @@
     -->
     <key>ProgramArguments</key>
     <array>
-        <string>YOUR_PYTHON_PATH</string>
+        <string>/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13</string>
         <string>-u</string>
-        <string>YOUR_HOME/whisper-dictate/dictate.py</string>
+        <string>/Users/jonathankaslow/whisper-dictate/dictate.py</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>YOUR_HOME/whisper-dictate</string>
+    <string>/Users/jonathankaslow/whisper-dictate</string>
 
     <key>RunAtLoad</key>
     <true/>
@@ -41,9 +41,9 @@
     <integer>5</integer>
 
     <key>StandardOutPath</key>
-    <string>YOUR_HOME/whisper-dictate/dictate.log</string>
+    <string>/Users/jonathankaslow/whisper-dictate/dictate.log</string>
     <key>StandardErrorPath</key>
-    <string>YOUR_HOME/whisper-dictate/dictate.err.log</string>
+    <string>/Users/jonathankaslow/whisper-dictate/dictate.err.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -51,7 +51,7 @@
         <string>/Library/Frameworks/Python.framework/Versions/3.13/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <!-- Pull in faster-whisper, sounddevice, pynput, etc. from the venv -->
         <key>PYTHONPATH</key>
-        <string>YOUR_HOME/whisper-dictate/.venv/lib/python3.13/site-packages</string>
+        <string>/Users/jonathankaslow/whisper-dictate/.venv/lib/python3.13/site-packages</string>
     </dict>
 </dict>
 </plist>

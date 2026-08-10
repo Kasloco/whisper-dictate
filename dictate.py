@@ -5,15 +5,17 @@ Push-to-talk dictation with faster-whisper.
 Usage:
     Hold RIGHT OPTION key -> record
     Release RIGHT OPTION  -> transcribe + paste into focused window
+    CTRL+SHIFT+S          -> speak the currently selected response
 
 Works anywhere on macOS: Discord desktop, Telegram desktop, browsers,
 Claude, terminal — whatever window is focused when you release the key.
 
 Quit with Ctrl+C in this terminal.
 """
+import os
 import sys
-import time
 import threading
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -23,6 +25,8 @@ from pynput.keyboard import Controller, Key
 from faster_whisper import WhisperModel
 
 from overlay import Overlay
+from response_capture import capture_selected_text
+from voice_output import VoiceOutput
 
 # ---------- Config ----------
 MODEL_SIZE   = "small.en"   # tiny.en | base.en | small.en | medium.en
@@ -32,6 +36,7 @@ HOTKEY       = Key.alt_r    # Right Option. Use Key.alt_l for Left Option.
 AUTO_PASTE   = True         # If False, text is only copied to clipboard.
 LANGUAGE     = "en"         # set to None for autodetect
 MIN_SECONDS  = 0.3          # ignore blips shorter than this
+SPEAK_HOTKEY = os.getenv("SPEAK_HOTKEY", "<ctrl>+<shift>+s")
 # ----------------------------
 
 print(f"Loading faster-whisper model '{MODEL_SIZE}' (compute_type={COMPUTE_TYPE})...")
@@ -41,6 +46,9 @@ print("Ready. Hold RIGHT OPTION to dictate. Ctrl+C to quit.\n")
 
 kbd = Controller()
 overlay = Overlay()
+voice_output = VoiceOutput()
+print(voice_output.startup_message())
+print(f"Select a response and press {SPEAK_HOTKEY} to hear it.\n")
 
 _recording = False
 _frames: list = []
@@ -103,9 +111,35 @@ def transcribe_and_paste():
     overlay.hide()
 
 
+def speak_selected_response():
+    """Read the active text selection without permanently changing clipboard."""
+
+    selected = capture_selected_text(kbd)
+    if not selected:
+        print("[voice] No selected text found. Select the response first.")
+        overlay.hide()
+        return
+
+    print(f"[voice] speaking selected response ({len(selected)} chars)...")
+    accepted = voice_output.speak(
+        selected,
+        on_start=overlay.show_speaking,
+        on_done=overlay.hide,
+    )
+    if not accepted:
+        overlay.hide()
+
+
+def on_speak_hotkey():
+    # Do not block the keyboard listener while copying or generating audio.
+    threading.Thread(target=speak_selected_response, daemon=True).start()
+
+
 def on_press(key):
     global _recording
     if key == HOTKEY:
+        # Speaking should stop as soon as the user starts a new dictation.
+        voice_output.stop()
         with _lock:
             if _recording:
                 return
@@ -128,7 +162,20 @@ def on_release(key):
 
 def _listen():
     """Run the keyboard listener (blocks until interrupted)."""
-    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    speak_hotkey = keyboard.HotKey(
+        keyboard.HotKey.parse(SPEAK_HOTKEY),
+        on_speak_hotkey,
+    )
+
+    def press(key):
+        speak_hotkey.press(listener.canonical(key))
+        on_press(key)
+
+    def release(key):
+        speak_hotkey.release(listener.canonical(key))
+        on_release(key)
+
+    with keyboard.Listener(on_press=press, on_release=release) as listener:
         listener.join()
 
 
@@ -143,6 +190,7 @@ def main():
             stream.close()
         except Exception:
             pass
+        voice_output.stop()
         print("\nExiting.")
 
 

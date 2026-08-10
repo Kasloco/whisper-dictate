@@ -1,10 +1,13 @@
 # whisper-dictate
 
-Universal push-to-talk dictation for macOS (Apple Silicon) using `faster-whisper`.
+Universal push-to-talk dictation and response voice for macOS (Apple Silicon).
+Local `faster-whisper` handles input; ElevenLabs (with a free macOS fallback)
+can read selected assistant responses back to you.
+
 Hold **Right Option**, speak, release — the transcribed text is pasted into
-whichever window is focused. A floating status pill at the top of your screen
-shows **Recording…** (red) while you speak and **Transcribing…** (blue) while
-the model processes — then disappears once the text is pasted.
+whichever window is focused. Select a response anywhere and press
+**Ctrl+Shift+S** to hear it. A floating status pill shows **Recording…**,
+**Transcribing…**, or **Speaking…** while the tool works.
 
 Works with Discord desktop, Telegram desktop, Claude, browsers, terminal,
 anywhere. No special integration required — just focus the chat and talk.
@@ -47,7 +50,64 @@ Usage:
 - Focus any text field (Discord message box, Telegram, Claude, etc.)
 - **Hold Right Option**, speak
 - **Release** — text appears in the field
+- Select an assistant response and press **Ctrl+Shift+S** to hear it
 - Ctrl+C in the terminal to quit
+
+## Speaking responses
+
+The response feature is intentionally selection-based so it works across apps
+without scraping private application APIs. After an assistant responds:
+
+1. Select the response text.
+2. Press **Ctrl+Shift+S**.
+3. The selection is copied temporarily, sent to ElevenLabs, and then your
+   previous clipboard contents are restored.
+
+When no ElevenLabs key is configured, the same workflow uses macOS `say`
+locally. When ElevenLabs is configured, the selected text leaves the Mac and
+is sent to the ElevenLabs Text to Speech API. The local `voice-usage.log`
+contains only provider, model, character count, and timestamp—not response
+text.
+
+The output layer can also be used by other integrations:
+
+```bash
+python speak_response.py --clipboard
+printf '%s' "Response text" | python speak_response.py --stdin
+```
+
+### ElevenLabs setup
+
+For a terminal session, set the key directly:
+
+```bash
+export ELEVENLABS_API_KEY="your-api-key"
+```
+
+You can also copy `.env.example` to `.env` and fill in the values. `.env` is
+ignored by Git.
+
+For LaunchAgent or login-started use, store it in the macOS Keychain so it is
+available without putting the secret in this repository:
+
+```bash
+security add-generic-password \
+  -s whisper-dictate-elevenlabs \
+  -a "$USER" \
+  -w "$ELEVENLABS_API_KEY" \
+  -U
+```
+
+Optional configuration:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `ELEVENLABS_VOICE_ID` | `JBFqnCBsd6RMkjVDRZzb` | Set this to a voice from your ElevenLabs library. |
+| `ELEVENLABS_MODEL_ID` | `eleven_flash_v2_5` | Fast model suitable for conversational playback. |
+| `ELEVENLABS_OUTPUT_FORMAT` | `mp3_44100_128` | Audio format passed to the streaming endpoint. |
+| `SPEAK_HOTKEY` | `<ctrl>+<shift>+s` | `pynput` hotkey syntax for reading a selection. |
+| `MAX_SPOKEN_CHARS` | `4000` | Bounds accidental long selections and TTS cost. |
+| `VOICE_FALLBACK_TO_SAY` | `True` | Use macOS speech if ElevenLabs is unavailable. |
 
 ## Configuration
 

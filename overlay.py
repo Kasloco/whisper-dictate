@@ -5,6 +5,7 @@ overlay.py – Floating status-pill overlay for whisper-dictate.
 Shows a small pill at the top-centre of the screen:
   • Red  + "Recording…"     while the hotkey is held
   • Dark + "Transcribing…"  while faster-whisper processes audio
+  • Purple + "Speaking…"    while ElevenLabs or macOS reads a response
   • Hidden                  at all other times
 
 Requires pyobjc-framework-Cocoa.  If the package is missing the module
@@ -31,6 +32,7 @@ except ImportError:
 HIDDEN = 0
 RECORDING = 1
 TRANSCRIBING = 2
+SPEAKING = 3
 
 # Geometry
 _W = 180        # pill width
@@ -71,6 +73,10 @@ if _HAS_APPKIT:
                 AppKit.NSColor.colorWithRed_green_blue_alpha_(
                     0.82, 0.08, 0.08, 0.92,
                 ).setFill()
+            elif self._state == SPEAKING:
+                AppKit.NSColor.colorWithRed_green_blue_alpha_(
+                    0.30, 0.12, 0.48, 0.92,
+                ).setFill()
             else:
                 AppKit.NSColor.colorWithRed_green_blue_alpha_(
                     0.13, 0.13, 0.15, 0.92,
@@ -87,6 +93,10 @@ if _HAS_APPKIT:
                 AppKit.NSColor.colorWithRed_green_blue_alpha_(
                     1.0, 0.40, 0.40, self._pulse,
                 ).setFill()
+            elif self._state == SPEAKING:
+                AppKit.NSColor.colorWithRed_green_blue_alpha_(
+                    0.72, 0.48, 1.0, self._pulse,
+                ).setFill()
             else:
                 AppKit.NSColor.colorWithRed_green_blue_alpha_(
                     0.40, 0.72, 1.0, self._pulse,
@@ -94,11 +104,12 @@ if _HAS_APPKIT:
             dot.fill()
 
             # ── text label ──────────────────────────────────
-            label = (
-                "Recording\u2026"
-                if self._state == RECORDING
-                else "Transcribing\u2026"
-            )
+            if self._state == RECORDING:
+                label = "Recording\u2026"
+            elif self._state == SPEAKING:
+                label = "Speaking\u2026"
+            else:
+                label = "Transcribing\u2026"
             attrs = {
                 AppKit.NSFontAttributeName: AppKit.NSFont.systemFontOfSize_weight_(
                     13, 0.3,
@@ -139,6 +150,9 @@ if _HAS_APPKIT:
 
         def show_transcribing(self):
             self._state = TRANSCRIBING
+
+        def show_speaking(self):
+            self._state = SPEAKING
 
         def hide(self):
             self._state = HIDDEN
@@ -242,6 +256,9 @@ else:
             pass
 
         def show_transcribing(self):
+            pass
+
+        def show_speaking(self):
             pass
 
         def hide(self):
