@@ -26,8 +26,9 @@ from pynput.keyboard import Controller, Key
 from faster_whisper import WhisperModel
 
 from overlay import Overlay
-from response_capture import capture_selected_text, capture_ax_app_text
+from response_capture import capture_selected_text, capture_ax_app_text, extract_last_response
 from voice_output import VoiceOutput
+
 
 
 # ---------- Config ----------
@@ -119,14 +120,17 @@ def _auto_read_worker(app_pid: int, prompt_text: str):
         # 1. Try Accessibility API text from the target application window
         ax_text = capture_ax_app_text(app_pid)
         if ax_text and ax_text != last_ax_text and ax_text.strip() != prompt_text.strip():
-            print(f"[voice] Hands-free auto-detected response from app ({len(ax_text)} chars). Speaking...")
-            _armed_until = 0.0
-            voice_output.speak(
-                ax_text,
-                on_start=overlay.show_speaking,
-                on_done=overlay.hide,
-            )
-            return
+            clean_response = extract_last_response(ax_text, prompt_text)
+            if clean_response:
+                print(f"[voice] Hands-free auto-detected response from app ({len(clean_response)} chars). Speaking...")
+                _armed_until = 0.0
+                voice_output.speak(
+                    clean_response,
+                    on_start=overlay.show_speaking,
+                    on_done=overlay.hide,
+                )
+                return
+
 
         # 2. Check if clipboard received the response automatically
         try:

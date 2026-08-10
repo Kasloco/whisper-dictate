@@ -81,3 +81,22 @@ def capture_ax_app_text(pid: int) -> Optional[str]:
         pass
     return None
 
+
+def extract_last_response(full_text: str, prompt_text: str = "") -> str:
+    """Extract only the newest response block added after prompt_text."""
+    if not full_text:
+        return ""
+
+    text = full_text.strip()
+    if prompt_text and prompt_text in text:
+        after = text.rsplit(prompt_text, 1)[-1].strip()
+        if after:
+            paragraphs = [p.strip() for p in after.split("\n\n") if p.strip()]
+            return paragraphs[-1] if paragraphs else after
+
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if len(paragraphs) > 1:
+        return paragraphs[-1]
+    return text
+
+
