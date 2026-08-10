@@ -88,15 +88,22 @@ def extract_last_response(full_text: str, prompt_text: str = "") -> str:
         return ""
 
     text = full_text.strip()
-    if prompt_text and prompt_text in text:
-        after = text.rsplit(prompt_text, 1)[-1].strip()
-        if after:
-            paragraphs = [p.strip() for p in after.split("\n\n") if p.strip()]
-            return paragraphs[-1] if paragraphs else after
+    p_strip = prompt_text.strip()
+
+    if p_strip and p_strip in text:
+        after = text.rsplit(p_strip, 1)[-1].strip()
+        if not after or after == p_strip:
+            return ""
+        paragraphs = [p.strip() for p in after.split("\n\n") if p.strip()]
+        res = paragraphs[-1] if paragraphs else after
+        return res if res.strip() != p_strip else ""
+
+    if p_strip and text == p_strip:
+        return ""
 
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    if len(paragraphs) > 1:
-        return paragraphs[-1]
-    return text
+    res = paragraphs[-1] if paragraphs else text
+    return res if res.strip() != p_strip else ""
+
 
 

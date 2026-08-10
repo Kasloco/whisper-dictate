@@ -119,10 +119,10 @@ def _auto_read_worker(app_pid: int, prompt_text: str):
 
         # 1. Try Accessibility API text from the target application window
         ax_text = capture_ax_app_text(app_pid)
-        if ax_text and ax_text != last_ax_text and ax_text.strip() != prompt_text.strip():
+        if ax_text and ax_text != last_ax_text:
             clean_response = extract_last_response(ax_text, prompt_text)
-            if clean_response:
-                print(f"[voice] Hands-free auto-detected response from app ({len(clean_response)} chars). Speaking...")
+            if clean_response and clean_response.strip() != prompt_text.strip():
+                print(f"[voice] Hands-free auto-detected Hermes response ({len(clean_response)} chars). Speaking...")
                 _armed_until = 0.0
                 voice_output.speak(
                     clean_response,
@@ -130,7 +130,6 @@ def _auto_read_worker(app_pid: int, prompt_text: str):
                     on_done=overlay.hide,
                 )
                 return
-
 
         # 2. Check if clipboard received the response automatically
         try:
@@ -141,7 +140,7 @@ def _auto_read_worker(app_pid: int, prompt_text: str):
                 and clip.strip() != prompt_text.strip()
                 and "__WHISPER_DICTATE_SELECTION_" not in clip
             ):
-                print(f"[voice] Auto-detected response from clipboard ({len(clip)} chars). Speaking...")
+                print(f"[voice] Auto-detected Hermes response from clipboard ({len(clip)} chars). Speaking...")
                 _armed_until = 0.0
                 voice_output.speak(
                     clip,
@@ -151,6 +150,7 @@ def _auto_read_worker(app_pid: int, prompt_text: str):
                 return
         except Exception:
             pass
+
 
 
 
