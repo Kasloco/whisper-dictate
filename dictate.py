@@ -54,6 +54,55 @@ _recording = False
 _frames: list = []
 _lock = threading.Lock()
 
+# ---------- Armed Response Reader State ----------
+_armed_until: float = 0.0
+_last_dictated_text: str = ""
+_last_seen_clipboard: str = ""
+RESPONSE_TIMEOUT_SECONDS = 90.0
+# -------------------------------------------------
+
+
+def _clipboard_watcher():
+    """Monitor clipboard for new response text, ONLY while armed after dictation."""
+    global _armed_until, _last_seen_clipboard
+    try:
+        _last_seen_clipboard = pyperclip.paste()
+    except Exception:
+        _last_seen_clipboard = ""
+
+    while True:
+        time.sleep(0.3)
+        now = time.time()
+
+        if now > _armed_until:
+            continue
+
+        try:
+            current = pyperclip.paste()
+        except Exception:
+            continue
+
+        if current and current != _last_seen_clipboard:
+            _last_seen_clipboard = current
+
+            # Ignore if clipboard is identical to the prompt the user just dictated
+            if current.strip() == _last_dictated_text.strip():
+                continue
+
+            # Ignore temporary selection markers from response_capture
+            if "__WHISPER_DICTATE_SELECTION_" in current:
+                continue
+
+            # Disarm immediately so subsequent copies are ignored
+            _armed_until = 0.0
+            print(f"[voice] Response captured from clipboard ({len(current)} chars). Speaking...")
+            voice_output.speak(
+                current,
+                on_start=overlay.show_speaking,
+                on_done=overlay.hide,
+            )
+
+
 
 def audio_callback(indata, frames_count, time_info, status):
     if status:
@@ -74,7 +123,7 @@ stream.start()
 
 
 def transcribe_and_paste():
-    global _frames
+    global _frames, _armed_until, _last_dictated_text, _last_seen_clipboard
     with _lock:
         chunks = _frames
         _frames = []
@@ -108,7 +157,14 @@ def transcribe_and_paste():
         with kbd.pressed(Key.cmd):
             kbd.press("v")
             kbd.release("v")
+
+    # Arm response watcher for 90 seconds
+    _last_dictated_text = text
+    _last_seen_clipboard = text
+    _armed_until = time.time() + RESPONSE_TIMEOUT_SECONDS
+    print("  [voice] Dictation finished. Armed for response (copy reply in Discord to speak).")
     overlay.hide()
+
 
 
 def speak_selected_response():
@@ -162,10 +218,13 @@ def on_release(key):
 
 def _listen():
     """Run the keyboard listener (blocks until interrupted)."""
+    threading.Thread(target=_clipboard_watcher, daemon=True).start()
+
     speak_hotkey = keyboard.HotKey(
         keyboard.HotKey.parse(SPEAK_HOTKEY),
         on_speak_hotkey,
     )
+
 
     def press(key):
         speak_hotkey.press(listener.canonical(key))
