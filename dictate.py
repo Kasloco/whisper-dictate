@@ -41,11 +41,12 @@ LANGUAGE     = "en"         # set to None for autodetect
 MIN_SECONDS  = 0.3          # ignore blips shorter than this
 SPEAK_HOTKEY = os.getenv("SPEAK_HOTKEY", "<ctrl>+<shift>+s")
 
-# AI Voice Assistant Settings
-ASSISTANT_MODE = os.getenv("ASSISTANT_MODE", "True").lower() in ("true", "1", "yes")
+# AI Voice Assistant Settings (set ASSISTANT_MODE=True in .env to enable direct LLM replies)
+ASSISTANT_MODE = os.getenv("ASSISTANT_MODE", "False").lower() in ("true", "1", "yes")
 OLLAMA_MODEL   = os.getenv("OLLAMA_MODEL", "glm-5.2:cloud")
 OLLAMA_URL     = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 # ----------------------------
+
 
 
 def query_llm_assistant(prompt_text: str) -> str:
@@ -196,28 +197,6 @@ def transcribe_and_paste():
         overlay.hide()
         return
     print(f"  > {text}")
-
-    if ASSISTANT_MODE:
-        print(f"  [assistant] Querying AI model '{OLLAMA_MODEL}'...")
-        overlay.show_transcribing()
-        ai_response = query_llm_assistant(text)
-        if ai_response:
-            print(f"  [assistant response] > {ai_response}")
-            pyperclip.copy(ai_response)
-            if AUTO_PASTE:
-                time.sleep(0.08)
-                with kbd.pressed(Key.cmd):
-                    kbd.press("v")
-                    kbd.release("v")
-
-            print("  [voice] Speaking AI response via ElevenLabs...")
-            voice_output.speak(
-                ai_response,
-                on_start=overlay.show_speaking,
-                on_done=overlay.hide,
-            )
-            return
-
     pyperclip.copy(text)
     if AUTO_PASTE:
         # small delay so modifier key release is registered
@@ -232,6 +211,20 @@ def transcribe_and_paste():
     _armed_until = time.time() + RESPONSE_TIMEOUT_SECONDS
     print("  [voice] Dictation finished. Armed for AI response (copy reply to speak).")
     overlay.hide()
+
+    if ASSISTANT_MODE:
+        def _async_assistant_task():
+            print(f"  [assistant] Querying AI model '{OLLAMA_MODEL}'...")
+            ai_response = query_llm_assistant(text)
+            if ai_response:
+                print(f"  [assistant response] > {ai_response}")
+                voice_output.speak(
+                    ai_response,
+                    on_start=overlay.show_speaking,
+                    on_done=overlay.hide,
+                )
+        threading.Thread(target=_async_assistant_task, daemon=True).start()
+
 
 
 
